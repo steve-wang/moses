@@ -16,16 +16,20 @@ type Proxy struct {
 }
 
 type Acceptor interface {
-	Accept(net.Conn) (*Proxy, error)
+	Accept(net.Conn, Connector) (*Proxy, error)
 }
 
 type Server struct {
-	listener        net.Listener
-	acceptor Acceptor
+	listener  net.Listener
+	connector Connector
+	acceptor  Acceptor
 }
 
-func NewServer(acceptor Acceptor) *Server {
-	return &Server{acceptor: acceptor}
+func NewServer(acceptor Acceptor, connector Connector) *Server {
+	return &Server{
+		acceptor:  acceptor,
+		connector: connector,
+	}
 }
 
 func (p *Server) Start(port uint16) error {
@@ -52,7 +56,7 @@ func (p *Server) Serve() {
 }
 
 func (p *Server) process(src net.Conn) (err error) {
-	proxy, err := p.acceptor.Accept(src)
+	proxy, err := p.acceptor.Accept(src, p.connector)
 	if err != nil {
 		src.Close()
 		return err
