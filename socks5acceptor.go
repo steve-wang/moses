@@ -12,11 +12,6 @@ const (
 )
 
 type SOCKS5Acceptor struct {
-	connector Connector
-}
-
-func NewSOCKS5Acceptor(connector Connector) *SOCKS5Acceptor {
-	return &SOCKS5Acceptor{connector}
 }
 
 func (p *SOCKS5Acceptor) welcome(rw io.ReadWriter) (err error) {
@@ -39,7 +34,7 @@ func (p *SOCKS5Acceptor) welcome(rw io.ReadWriter) (err error) {
 	return nil
 }
 
-func (p *SOCKS5Acceptor) Accept(src net.Conn) (_ *Proxy, err error) {
+func (p *SOCKS5Acceptor) Accept(src net.Conn, connector Connector) (_ *Proxy, err error) {
 	if err := p.welcome(src); err != nil {
 		return nil, err
 	}
@@ -69,7 +64,7 @@ func (p *SOCKS5Acceptor) Accept(src net.Conn) (_ *Proxy, err error) {
 	if err := req.Read(src); err != nil {
 		return nil, err
 	}
-	dst, err := p.connector.Connect(req.Address())
+	dst, err := connector.Connect(req.Address())
 	if err != nil {
 		write(src, []byte{_VERSION, 4, 0, head[3]})
 		req.Write(src)
