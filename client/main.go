@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"moses"
+	"github.com/steve-wang/moses"
 	"os"
 	"path/filepath"
 )
