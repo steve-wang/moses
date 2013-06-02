@@ -12,7 +12,7 @@ type Connector interface {
 }
 
 type Proxy struct {
-	c1, c2 net.Conn
+	Con1, Con2 net.Conn
 }
 
 type Acceptor interface {
