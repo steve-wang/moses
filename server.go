@@ -69,11 +69,11 @@ func (p *Server) process(src net.Conn) (err error) {
 		cherr <- err
 	}
 	wg.Add(2)
-	go run(proxy.c1, proxy.c2)
-	go run(proxy.c2, proxy.c1)
+	go run(proxy.Con1, proxy.Con2)
+	go run(proxy.Con2, proxy.Con1)
 	<-cherr
-	proxy.c1.Close()
-	proxy.c2.Close()
+	proxy.Con1.Close()
+	proxy.Con2.Close()
 	wg.Wait()
 	return nil
 }
