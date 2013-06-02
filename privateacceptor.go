@@ -14,9 +14,7 @@ type PrivateAcceptor struct {
 }
 
 func NewPrivateAcceptor(checker AuthChecker) *PrivateAcceptor {
-	return &PrivateAcceptor{
-		checker: checker,
-	}
+	return &PrivateAcceptor{checker: checker}
 }
 
 func (p *PrivateAcceptor) Accept(conn net.Conn, connector Connector) (*Proxy, error) {
