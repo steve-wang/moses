@@ -10,18 +10,16 @@ type AuthChecker interface {
 }
 
 type PrivateAcceptor struct {
-	connector Connector
-	checker   AuthChecker
+	checker AuthChecker
 }
 
-func NewPrivateAcceptor(connector Connector, checker AuthChecker) *PrivateAcceptor {
+func NewPrivateAcceptor(checker AuthChecker) *PrivateAcceptor {
 	return &PrivateAcceptor{
-		connector: connector,
-		checker:   checker,
+		checker: checker,
 	}
 }
 
-func (p *PrivateAcceptor) Accept(conn net.Conn) (*Proxy, error) {
+func (p *PrivateAcceptor) Accept(conn net.Conn, connector Connector) (*Proxy, error) {
 	var key [4]byte
 	if err := read(conn, key[:]); err != nil {
 		return nil, err
@@ -38,7 +36,7 @@ func (p *PrivateAcceptor) Accept(conn net.Conn) (*Proxy, error) {
 		client.Write([]byte{ERRCODE_AUTH})
 		return nil, errors.New("not permitted")
 	}
-	dst, err := p.connector.Connect(auth.Address)
+	dst, err := connector.Connect(auth.Address)
 	if err != nil {
 		client.Write([]byte{ERRCODE_CONN})
 		return nil, err
