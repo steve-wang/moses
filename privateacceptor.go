@@ -50,6 +50,6 @@ func (p *PrivateAcceptor) Accept(conn net.Conn, connector Connector) (*Proxy, er
 		return nil, err
 	}
 	return &Proxy{
-		c1: client,
-		c2: dst}, nil
+		Con1: client,
+		Con2: dst}, nil
 }
