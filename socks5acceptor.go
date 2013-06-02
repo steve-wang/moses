@@ -82,6 +82,6 @@ func (p *SOCKS5Acceptor) Accept(src net.Conn, connector Connector) (_ *Proxy, er
 		return nil, err
 	}
 	return &Proxy{
-		c1: src,
-		c2: dst}, nil
+		Con1: src,
+		Con2: dst}, nil
 }
