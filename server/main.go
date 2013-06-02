@@ -50,9 +50,8 @@ func run(wd string, param *Param) error {
 	if err != nil {
 		return err
 	}
-	connector := &moses.DirectConnector{}
-	acceptor := moses.NewPrivateAcceptor(connector, userlist)
-	srv := moses.NewServer(acceptor)
+	acceptor := moses.NewPrivateAcceptor(userlist)
+	srv := moses.NewServer(acceptor, &moses.DirectConnector{})
 	if err := srv.Start(uint16(param.Port)); err != nil {
 		return err
 	}
