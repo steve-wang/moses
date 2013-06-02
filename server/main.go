@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"moses"
+	"github.com/steve-wang/moses"
 	"os"
 	"path/filepath"
 	"sync"
