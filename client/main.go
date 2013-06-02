@@ -4,8 +4,8 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"io"
 	"github.com/steve-wang/moses"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -54,8 +54,7 @@ func run(param *Param) error {
 		Password:     md5sum(param.Password),
 		ProxyAddress: param.ProxyAddress,
 	}
-	acceptor := moses.NewSOCKS5Acceptor(connector)
-	srv := moses.NewServer(acceptor)
+	srv := moses.NewServer(&moses.SOCKS5Acceptor{}, connector)
 	if err := srv.Start(uint16(param.Port)); err != nil {
 		return err
 	}
