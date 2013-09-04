@@ -1,58 +1,62 @@
 package main
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"github.com/steve-wang/moses"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
 
-type Param struct {
-	Port int `json:"port"`
+func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	if err := work(); err != nil {
+		fmt.Println(err)
+	}
 }
 
-func main() {
+func Md5sum(str string) string {
+	h := md5.New()
+	io.WriteString(h, str)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func loadJson(file string, v interface{}) error {
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return json.NewDecoder(f).Decode(v)
+}
+
+func work() error {
 	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
-	var param Param
-	load := func(param *Param) (err error) {
-		file := filepath.Join(wd, "moses_server.json")
-		defer func() {
-			if err != nil {
-				err = fmt.Errorf("failed to load %s: %s", file, err)
-			}
-		}()
-		f, err := os.Open(file)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		return json.NewDecoder(f).Decode(param)
+	var param struct {
+		Port int `json:"port"`
 	}
-	if err := load(&param); err != nil {
-		fmt.Println(err)
-		return
+	if err := loadJson(filepath.Join(wd, "moses_server.json"), &param); err != nil {
+		return err
 	}
-	if err := run(wd, &param); err != nil {
-		fmt.Println(err)
-		return
-	}
+	return run(wd, param.Port)
 }
 
-func run(wd string, param *Param) error {
+func run(wd string, port int) error {
 	userlist, err := NewUserList(wd)
 	if err != nil {
 		return err
 	}
-	acceptor := moses.NewPrivateAcceptor(userlist)
+	acceptor := moses.NewSOCK5Acceptor(userlist)
 	srv := moses.NewServer(acceptor, &moses.DirectConnector{})
-	if err := srv.Start(uint16(param.Port)); err != nil {
+	if err := srv.Start(uint16(port)); err != nil {
 		return err
 	}
 	srv.Serve()
@@ -70,28 +74,10 @@ type Auth struct {
 	Password string `json:"password"`
 }
 
-func loadUserList(file string) (_ []Auth, err error) {
-	defer func() {
-		if err != nil {
-			err = fmt.Errorf("failed to load %s: %s", file, err)
-		}
-	}()
-	f, err := os.Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var users []Auth
-	if err := json.NewDecoder(f).Decode(&users); err != nil {
-		return nil, err
-	}
-	return users, nil
-}
-
 func NewUserList(wd string) (*UserList, error) {
 	file := filepath.Join(wd, "moses_userlist.json")
-	users, err := loadUserList(file)
-	if err != nil {
+	var users []Auth
+	if err := loadJson(file, &users); err != nil {
 		return nil, err
 	}
 	m := make(map[string]string)
@@ -110,7 +96,7 @@ func (p *UserList) Check(user, password string) bool {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	pwd, ok := p.users[user]
-	return ok && pwd == password
+	return ok && pwd == Md5sum(password)
 }
 
 func (p *UserList) update(users []Auth) {
@@ -124,8 +110,10 @@ func (p *UserList) update(users []Auth) {
 
 func (p *UserList) run() {
 	t := time.Now()
+	tick := time.Tick(time.Minute)
+	var users []Auth
 	for {
-		<-time.After(time.Minute)
+		<-tick
 		fi, err := os.Stat(p.file)
 		if err != nil {
 			continue
@@ -133,10 +121,10 @@ func (p *UserList) run() {
 		if t.After(fi.ModTime()) {
 			continue
 		}
-		users, err := loadUserList(p.file)
-		if err != nil {
+		if err := loadJson(p.file, &users); err != nil {
 			continue
 		}
 		p.update(users)
+		t = fi.ModTime()
 	}
 }

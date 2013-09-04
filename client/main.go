@@ -1,29 +1,24 @@
 package main
 
 import (
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"github.com/steve-wang/moses"
-	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 type Param struct {
-	User         string `json:"user"`
-	Password     string `json:"password"`
-	ProxyAddress string `json:"proxy"`
-	Port         int    `json:"port"`
-}
-
-func md5sum(str string) string {
-	h := md5.New()
-	io.WriteString(h, str)
-	return fmt.Sprintf("%X", h.Sum(nil))
+	User      string `json:"user"`
+	Password  string `json:"password"`
+	LocalPort uint16 `json:"port_local"`
+	ProxyHost string `json:"host_proxy"`
+	ProxyPort uint16 `json:"port_proxy"`
 }
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Println(err)
@@ -49,13 +44,16 @@ func main() {
 }
 
 func run(param *Param) error {
-	connector := &moses.PrivateConnector{
-		User:         param.User,
-		Password:     md5sum(param.Password),
-		ProxyAddress: param.ProxyAddress,
+	connector := &moses.SOCKS5Connector{
+		User:     param.User,
+		Password: param.Password,
+		Host:     param.ProxyHost,
+		Port:     param.ProxyPort,
 	}
-	srv := moses.NewServer(&moses.SOCKS5Acceptor{}, connector)
-	if err := srv.Start(uint16(param.Port)); err != nil {
+	//acceptor := moses.NewSOCK5Acceptor(nil)
+	acceptor := moses.SOCKS4Acceptor{}
+	srv := moses.NewServer(acceptor, connector)
+	if err := srv.Start(param.LocalPort); err != nil {
 		return err
 	}
 	srv.Serve()
