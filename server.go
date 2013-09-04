@@ -7,16 +7,18 @@ import (
 	"sync"
 )
 
-type Connector interface {
-	Connect(string) (net.Conn, error)
+type Connection interface {
+	Read([]byte) (int, error)
+	Write([]byte) (int, error)
+	Close() error
 }
 
-type Proxy struct {
-	Con1, Con2 net.Conn
+type Connector interface {
+	Connect(string) (Connection, error)
 }
 
 type Acceptor interface {
-	Accept(net.Conn, Connector) (*Proxy, error)
+	Accept(Connection, Connector) (Connection, Connection, error)
 }
 
 type Server struct {
@@ -56,24 +58,24 @@ func (p *Server) Serve() {
 }
 
 func (p *Server) process(src net.Conn) (err error) {
-	proxy, err := p.acceptor.Accept(src, p.connector)
+	con1, con2, err := p.acceptor.Accept(src, p.connector)
 	if err != nil {
 		src.Close()
 		return err
 	}
 	var wg sync.WaitGroup
 	cherr := make(chan error, 2)
-	run := func(src, dst net.Conn) {
+	run := func(src, dst Connection) {
 		defer wg.Done()
 		_, err := io.Copy(src, dst)
 		cherr <- err
 	}
 	wg.Add(2)
-	go run(proxy.Con1, proxy.Con2)
-	go run(proxy.Con2, proxy.Con1)
+	go run(con1, con2)
+	go run(con2, con1)
 	<-cherr
-	proxy.Con1.Close()
-	proxy.Con2.Close()
+	con1.Close()
+	con2.Close()
 	wg.Wait()
 	return nil
 }

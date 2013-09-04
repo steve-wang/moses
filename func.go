@@ -3,6 +3,7 @@ package moses
 import (
 	"errors"
 	"io"
+	"net"
 )
 
 func read(r io.Reader, data []byte) error {
@@ -27,7 +28,9 @@ func write(w io.Writer, data []byte) error {
 	for index < len(data) {
 		n, err := w.Write(data[index:])
 		if err != nil {
-			return err
+			if nerr, ok := err.(net.Error); !ok || !nerr.Temporary() {
+				return err
+			}
 		}
 		index += n
 	}
@@ -62,7 +65,7 @@ func writeUint16(w io.Writer, n uint16) error {
 	data[0] = byte(n & 0xff)
 	data[1] = byte((n >> 8) & 0xff)
 	return write(w, data[:])
-} 
+}
 
 func readUint32(r io.Reader) (uint32, error) {
 	var data [4]byte

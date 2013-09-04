@@ -1,10 +1,12 @@
-package moses 
+package moses
 
-import "net"
+import (
+	"net"
+)
 
 type DirectConnector struct {
 }
 
-func (p *DirectConnector) Connect(address string) (net.Conn, error) {
+func (p *DirectConnector) Connect(address string) (Connection, error) {
 	return net.Dial("tcp4", address)
-} 
+}

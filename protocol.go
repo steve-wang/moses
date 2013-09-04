@@ -3,27 +3,59 @@ package moses
 import (
 	"fmt"
 	"io"
+	"net"
 )
 
 type hello struct {
-	ver byte
+	ver     byte
 	methods []byte
 }
 
-func (p *hello) read(r io.Reader) error {
+func (p *hello) match(rw io.ReadWriter, method byte) error {
 	var head [2]byte
-	if err := read(r, head[:]); err != nil {
+	if err := read(rw, head[:]); err != nil {
 		return err
 	}
-	if count := int(head[1]); count > 0 {
-		methods := make([]byte, count)
-		if err := read(r, methods); err != nil {
-			return err
-		}
-		p.methods = methods
+	if head[0] != _VERSION {
+		return fmt.Errorf("VER is invalid: %d", head[0])
 	}
-	p.ver = head[0]
-	return nil
+	count := int(head[1])
+	if count <= 0 {
+		return fmt.Errorf("NMETHODS is invliad: %d", count)
+	}
+	methods := make([]byte, count)
+	if err := read(rw, methods); err != nil {
+		return err
+	}
+	for _, m := range methods {
+		if m == method {
+			return write(rw, []byte{_VERSION, m})
+		}
+	}
+	write(rw, []byte{_VERSION, 0xff})
+	return fmt.Errorf("METHOD[%d] not found: %v", method, methods)
+}
+
+func (p *hello) auth(r io.Reader) (string, string, error) {
+	var buff [2]byte
+	if err := read(r, buff[:]); err != nil {
+		return "", "", err
+	}
+	if buff[0] != 1 {
+		return "", "", fmt.Errorf("invalid VER: %d", buff[0])
+	}
+	name := make([]byte, int(buff[1]))
+	if err := read(r, name); err != nil {
+		return "", "", err
+	}
+	if err := read(r, buff[:1]); err != nil {
+		return "", "", err
+	}
+	pass := make([]byte, int(buff[0]))
+	if err := read(r, pass); err != nil {
+		return "", "", err
+	}
+	return string(name), string(pass), nil
 }
 
 func (p *hello) findMethod(method byte) bool {
@@ -35,54 +67,8 @@ func (p *hello) findMethod(method byte) bool {
 	return false
 }
 
-type reqname struct {
-	Name string
-	Port uint16
-}
-
-func (p *reqname) Address() string {
-	return fmt.Sprintf("%s:%d", p.Name, p.Port)
-}
-
-func (p *reqname) Read(r io.Reader) error {
-	var data [1]byte
-	if err := read(r, data[:]); err != nil {
-		return err
-	}
-	size := int(data[0])
-	if size > 0 {
-		name := make([]byte, size)
-		if err := read(r, name[:]); err != nil {
-			return err
-		}
-		p.Name = string(name)
-	}
-	var port [2]byte
-	if err := read(r, port[:]); err != nil {
-		return err
-	}
-	p.Port = uint16(port[0]) << 8
-	p.Port |= uint16(port[1])
-	return nil
-}
-
-func (p *reqname) Write(w io.Writer) error {
-	var buf [258]byte
-	buf[0] = byte(len(p.Name))
-	index := 1
-	for i := byte(0); i < byte(len(p.Name)); i++ {
-		buf[index] = p.Name[i]
-		index++
-	}
-	buf[index] = byte((p.Port >> 8) & 0xff)
-	index++
-	buf[index] = byte(p.Port & 0xff)
-	index++
-	return write(w, buf[:index])
-}
-
 type reqipv4 struct {
-	IP [4]byte
+	IP   [4]byte
 	Port uint16
 }
 
@@ -113,6 +99,36 @@ func (p *reqipv4) Write(w io.Writer) error {
 	port[0] = byte((p.Port >> 8) & 0xff)
 	port[1] = byte(p.Port & 0xff)
 	return write(w, port[:])
+}
+
+type reqname struct {
+	reqipv4
+}
+
+func (p *reqname) Read(r io.Reader) error {
+	var data [1]byte
+	if err := read(r, data[:]); err != nil {
+		return err
+	}
+	size := int(data[0])
+	if size > 0 {
+		name := make([]byte, size)
+		if err := read(r, name[:]); err != nil {
+			return err
+		}
+		addr, err := net.ResolveIPAddr("ip4", string(name))
+		if err != nil {
+			return err
+		}
+		copy(p.IP[:], addr.IP.To4())
+	}
+	var port [2]byte
+	if err := read(r, port[:]); err != nil {
+		return err
+	}
+	p.Port = uint16(port[0]) << 8
+	p.Port |= uint16(port[1])
+	return nil
 }
 
 type Auth struct {

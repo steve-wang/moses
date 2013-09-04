@@ -4,54 +4,59 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 )
 
 const (
 	_VERSION = 5
 )
 
-type SOCKS5Acceptor struct {
-	connector Connector
+type AuthChecker interface {
+	Check(string, string) bool
 }
 
-func NewSOCKS5Acceptor(connector Connector) *SOCKS5Acceptor {
-	return &SOCKS5Acceptor{connector}
+type SOCKS5Acceptor struct {
+	checker AuthChecker
+}
+
+func NewSOCK5Acceptor(checker AuthChecker) *SOCKS5Acceptor {
+	return &SOCKS5Acceptor{checker: checker}
 }
 
 func (p *SOCKS5Acceptor) welcome(rw io.ReadWriter) (err error) {
 	var hi hello
-	if err := hi.read(rw); err != nil {
+	if p.checker == nil {
+		return hi.match(rw, 0)
+	}
+	// need authentication
+	if err := hi.match(rw, 2); err != nil {
 		return err
 	}
-	defer func() {
-		rep := []byte{_VERSION, 0}
-		if err != nil {
-			rep[1] = 0xff
-			write(rw, rep[:])
-		} else {
-			err = write(rw, rep[:])
-		}
-	}()
-	if !hi.findMethod(0) {
-		return errors.New("METHOD(0) not found")
+	user, pass, err := hi.auth(rw)
+	if err != nil {
+		return err
 	}
-	return nil
+	resp := [2]byte{1, 0}
+	if !p.checker.Check(user, pass) {
+		resp[1] = 0xff
+		write(rw, resp[:])
+		return errors.New("AUTH failed")
+	}
+	return write(rw, resp[:])
 }
 
-func (p *SOCKS5Acceptor) Accept(src net.Conn) (_ *Proxy, err error) {
+func (p *SOCKS5Acceptor) Accept(src Connection, connector Connector) (_ Connection, _ Connection, err error) {
 	if err := p.welcome(src); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var head [4]byte
 	if err := read(src, head[:]); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if head[0] != _VERSION {
-		return nil, fmt.Errorf("illegal VER: %d", head[0])
+		return nil, nil, fmt.Errorf("illegal VER: %d", head[0])
 	}
 	if head[1] != 1 {
-		return nil, fmt.Errorf("unsupported CMD: %d", head[1])
+		return nil, nil, fmt.Errorf("unsupported CMD: %d", head[1])
 	}
 	var req interface {
 		Read(io.Reader) error
@@ -64,29 +69,27 @@ func (p *SOCKS5Acceptor) Accept(src net.Conn) (_ *Proxy, err error) {
 	case 3:
 		req = &reqname{}
 	default:
-		return nil, fmt.Errorf("unsupported ATYP: %d", head[3])
+		return nil, nil, fmt.Errorf("unsupported ATYP: %d", head[3])
 	}
 	if err := req.Read(src); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	dst, err := p.connector.Connect(req.Address())
+	dst, err := connector.Connect(req.Address())
 	if err != nil {
 		write(src, []byte{_VERSION, 4, 0, head[3]})
 		req.Write(src)
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() {
 		if err != nil {
 			dst.Close()
 		}
 	}()
-	if err := write(src, []byte{_VERSION, 0, 0, head[3]}); err != nil {
-		return nil, err
+	if err := write(src, []byte{_VERSION, 0, 0, 1}); err != nil {
+		return nil, nil, err
 	}
 	if err := req.Write(src); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &Proxy{
-		Con1: src,
-		Con2: dst}, nil
+	return src, dst, nil
 }
